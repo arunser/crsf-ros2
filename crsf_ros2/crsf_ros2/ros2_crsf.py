@@ -7,6 +7,10 @@ import time
 from .submodules.crsf import *
 from rc_msgs.msg import RCMessage
 from rc_msgs.srv import CommandBool
+from crsf_msgs.msg import BatterySensor
+from crsf_msgs.msg import Attitude
+from crsf_msgs.msg import FlightMode
+
 
 
 SERIAL_PORT = "/dev/ttyUSB0"
@@ -42,14 +46,53 @@ class RosCsrf(Node):
         self.rc_sub = self.create_subscription(RCMessage, "/drone/rc_command", self.rc_command_topic_callback, 10)
         self.arming_srv = self.create_service(CommandBool, "/drone/cmd/arming", self.arming_service_callback)
 
+        self.batt_pub = self.create_publisher(BatterySensor, "/drone/battery_info", 1)
+        self.mode_pub = self.create_publisher(FlightMode, "/drone/flight_mode", 1)
+        self.attd_pub = self.create_publisher(Attitude, "/drone/attitude", 1)
+
         self.ser = serial.Serial(SERIAL_PORT, BAUDRATE, timeout=2)
         self.input = bytearray()
         self.unique = []
 
         self.timer = self.create_timer(timer_period, self.timer_callback)
 
+    def crsf_msgs_publisher(self, crsf_msg):
+        if crsf_msg == None:
+            pass
+        else:
+            msg_type = crsf_msg[0]
+            msg = crsf_msg[1:]
+            print(msg)
+            print(msg_type)
+            
+            if msg_type == 1:
+                attitude_msg = Attitude()
+                attitude_msg.pitch = msg[0]
+                attitude_msg.roll = msg[1]
+                attitude_msg.yaw = msg[2]
+                print("attitude pub")
+                self.attd_pub.publish(attitude_msg)
+                print("drone")
+
+            elif msg_type == 2:
+                mode_msg = FlightMode()
+                mode_msg.flight_mode = msg[0]
+                self.mode_pub.publish(mode_msg)
+
+            elif msg_type == 3:
+                batt_msg = BatterySensor()
+                batt_msg.vbat = msg[0]
+                batt_msg.curr = msg[1]
+                batt_msg.mah = msg[2]
+                batt_msg.pct = msg[3]
+                self.batt_pub.publish(batt_msg)
+
+            else:
+                pass
+
     def rc_command_topic_callback(self, msg):
         time.sleep(0.020)
+        self.CMDS["roll"] = msg.rc_roll
         self.CMDS["pitch"] = msg.rc_pitch
         self.CMDS["throttle"] = msg.rc_throttle
         self.CMDS["yaw"] = msg.rc_yaw
@@ -70,19 +113,20 @@ class RosCsrf(Node):
         return response
     
     def arm(self):
+        self.CMDS 
         self.get_logger().info("Arming drone")
         self.CMDS["roll"] = DEFAULT_ROLL_VALUE
         self.CMDS["pitch"] = DEFAULT_PITCH_VALUE
         self.CMDS["throttle"] = DEFAULT_THROTTLE_VALUE
         self.CMDS["yaw"] = DEFAULT_YAW_VALUE
-        self.CMDS["aux2"] = 2000
-        self.CMDS["aux4"] = 2000
+        self.CMDS["aux1"] = 2000
+        self.CMDS["aux2"] = 988
         self.get_logger().info(str(self.CMDS))
 
     def disarm(self):
         self.get_logger().info("Disarming drone")
+        self.CMDS["aux1"] = 988
         self.CMDS["aux2"] = 988
-        self.CMDS["aux4"] = 1200
         
     def pwm_to_csrf(self):
         self.PWM = []
@@ -95,6 +139,7 @@ class RosCsrf(Node):
     
     def timer_callback(self):
         TX = True
+        fm = 0
         CH = self.pwm_to_csrf()
         if self.ser.in_waiting > 0:
             self.input.extend(self.ser.read(self.ser.in_waiting))
@@ -117,8 +162,12 @@ class RosCsrf(Node):
                 if not crsf_validate_frame(single): # single[-1] != crc:
                     packet = ' '.join(map(hex, single))
                     print(f"crc error: {packet}")
+                #All packets are in the CRSF format [sync] [len] [type] [payload] [crc8] with a maximum total size of 64 bytes.
                 else:
-                    handleCrsfPacket(single[2], single)
+                    
+                    msg = handleCrsfPacket(single[2], single)
+                    self.crsf_msgs_publisher(msg)
+                
                     #print(single[2])
                     if single[2] not in self.unique:
                         self.unique.append(single[2])

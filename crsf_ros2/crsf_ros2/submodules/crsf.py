@@ -2,6 +2,7 @@
 from enum import IntEnum
 
 CRSF_SYNC = 0xC8
+msg_type = 0
 
 class PacketsTypes(IntEnum):
     GPS = 0x02
@@ -70,7 +71,7 @@ def packCrsfToBytes(channels) -> bytes:
 
 def channelsCrsfToChannelsPacket(channels) -> bytes:
     result = bytearray([CRSF_SYNC, 24, PacketsTypes.RC_CHANNELS_PACKED]) # 24 is packet length
-    result += packCrsfToBytes(channels)
+    result += packCrsfToBytes(channels)       
     result.append(crc8_data(result[2:]))
     return result
 
@@ -96,15 +97,24 @@ def handleCrsfPacket(ptype, data):
         roll = int.from_bytes(data[5:7], byteorder='big', signed=True) / 10000.0
         yaw = int.from_bytes(data[7:9], byteorder='big', signed=True) / 10000.0
         print(f"Attitude: Pitch={pitch:0.2f} Roll={roll:0.2f} Yaw={yaw:0.2f} (rad)")
+        msg_type = 1
+        return msg_type, pitch, roll, yaw
+
     elif ptype == PacketsTypes.FLIGHT_MODE:
         packet = ''.join(map(chr, data[3:-2]))
         print(f"Flight Mode: {packet}")
+        msg_type = 2
+        return msg_type, packet
+
     elif ptype == PacketsTypes.BATTERY_SENSOR:
         vbat = int.from_bytes(data[3:5], byteorder='big', signed=True) / 10.0
         curr = int.from_bytes(data[5:7], byteorder='big', signed=True) / 10.0
         mah = data[7] << 16 | data[8] << 7 | data[9]
         pct = data[10]
         print(f"Battery: {vbat:0.2f}V {curr:0.1f}A {mah}mAh {pct}%")
+        msg_type = 3
+        return msg_type, vbat, curr, mah, pct
+    
     elif ptype == PacketsTypes.BARO_ALT:
         print(f"BaroAlt: ")
     elif ptype == PacketsTypes.DEVICE_INFO:
@@ -127,4 +137,5 @@ def handleCrsfPacket(ptype, data):
     else:
         packet = ' '.join(map(hex, data))
         print(f"Unknown 0x{ptype:02x}: {packet}")
+
 
