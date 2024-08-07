@@ -62,17 +62,13 @@ class RosCsrf(Node):
         else:
             msg_type = crsf_msg[0]
             msg = crsf_msg[1:]
-            print(msg)
-            print(msg_type)
             
             if msg_type == 1:
                 attitude_msg = Attitude()
                 attitude_msg.pitch = msg[0]
                 attitude_msg.roll = msg[1]
                 attitude_msg.yaw = msg[2]
-                print("attitude pub")
                 self.attd_pub.publish(attitude_msg)
-                print("drone")
 
             elif msg_type == 2:
                 mode_msg = FlightMode()
@@ -96,37 +92,40 @@ class RosCsrf(Node):
         self.CMDS["pitch"] = msg.rc_pitch
         self.CMDS["throttle"] = msg.rc_throttle
         self.CMDS["yaw"] = msg.rc_yaw
-        self.CMDS["aux3"] = msg.aux3
-        self.CMDS["aux4"] = msg.aux4
-
         self.get_logger().info(str(self.CMDS))
 
     def arming_service_callback(self, request, response):
 
         if request.value:
             self.arm()
-            response.data = "Drone is ARMED"
+            response.data = "UAV is ARMED"
         else:
             self.disarm()
-            response.data = "Drone is DISARMED"
+            response.data = "UAV is DISARMED"
 
         return response
     
     def arm(self):
         self.CMDS 
-        self.get_logger().info("Arming drone")
+        self.get_logger().info("Arming UAV")
         self.CMDS["roll"] = DEFAULT_ROLL_VALUE
         self.CMDS["pitch"] = DEFAULT_PITCH_VALUE
         self.CMDS["throttle"] = DEFAULT_THROTTLE_VALUE
         self.CMDS["yaw"] = DEFAULT_YAW_VALUE
+        #for arming, use aux1
         self.CMDS["aux1"] = 2000
-        self.CMDS["aux2"] = 988
+        #for angle mode, use aux2
+        self.CMDS["aux2"] = 1500
+        #for headless mode, use aux3
+        self.CMDS["aux3"] = 1500
         self.get_logger().info(str(self.CMDS))
 
     def disarm(self):
-        self.get_logger().info("Disarming drone")
+        self.get_logger().info("Disarming UAV")
         self.CMDS["aux1"] = 988
         self.CMDS["aux2"] = 988
+        self.CMDS["aux3"] = 988
+        self.get_logger().info(str(self.CMDS))
         
     def pwm_to_csrf(self):
         self.PWM = []
@@ -166,9 +165,9 @@ class RosCsrf(Node):
                 else:
                     
                     msg = handleCrsfPacket(single[2], single)
+                    #for publishing telemetry onto ROS2 topics
                     self.crsf_msgs_publisher(msg)
                 
-                    #print(single[2])
                     if single[2] not in self.unique:
                         self.unique.append(single[2])
                     print(self.unique)
