@@ -14,7 +14,8 @@ from crsf_msgs.msg import FlightMode
 
 
 SERIAL_PORT = "/dev/ttyUSB0"
-BAUDRATE = 400000
+#BAUDRATE = 400000
+BAUDRATE = 5200000
 
 
 DEFAULT_ROLL_VALUE = 1500
